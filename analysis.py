@@ -174,7 +174,6 @@ class attack_analysis():
         self.orgLayerWeight = self.__get_layer_weight()
 
     def print_attack_config(self):
-        # 提取攻击层的信息
         attack_layers = list({item[4] for item in self.attack_config_list})
         total_attack_kernels = len(attack_layers)
         total_attack_elements = len(self.attack_config_list)
