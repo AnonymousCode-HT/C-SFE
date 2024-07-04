@@ -12,7 +12,7 @@ malicious_model.eval()
 malicious_model.to(DEVICE)
 
 clean_model = models.resnet18(pretrained=True)
-clean_model.eval()
+clean_model.eval()  # 设置为评估模式
 clean_model.to(DEVICE)
 
 transform = transforms.Compose([
@@ -31,6 +31,8 @@ top5_prob, top5_catid = torch.topk(probabilities, 5)
 
 with open('synset_words.txt') as f:
     labels = [line.strip() for line in f.readlines()]
+
+print(f"Read {args.input_image}")
 
 print("Clean model result:")
 for i in range(top5_prob.size(1)):
