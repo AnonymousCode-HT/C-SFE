@@ -12,7 +12,7 @@ malicious_model.eval()
 malicious_model.to(DEVICE)
 
 clean_model = models.resnet18(pretrained=True)
-clean_model.eval()  # 设置为评估模式
+clean_model.eval()
 clean_model.to(DEVICE)
 
 transform = transforms.Compose([
