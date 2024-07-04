@@ -1,12 +1,12 @@
+import warnings
 from utils import *
 from analysis import attack_analysis
-import pickle
-import pandas as pd
 
-DATASET_DIR = "./images/val_img"
-VAL_FILE_PTAH = './images/val.txt'
-LABELS = './images/synset_words.txt'
-TEST_IMG_NUM = 50
+warnings.filterwarnings("ignore", category=UserWarning, module='torchvision.models', lineno=223)
+
+VAL_FILE_PTAH = './val.txt'
+LABELS = './synset_words.txt'
+BATCH_SIZE = 10
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 if __name__ == '__main__':
@@ -14,40 +14,68 @@ if __name__ == '__main__':
 
     model = get_model(args.model).eval()
 
-    x_data, y_data = get_image(TEST_IMG_NUM, DATASET_DIR, VAL_FILE_PTAH)
+    data_loader = get_image(BATCH_SIZE, args.validation_size, args.validation_path, VAL_FILE_PTAH)
 
     class_name = np.loadtxt(LABELS, str, delimiter='\t').tolist()
     atk_analysis = attack_analysis(
-        model = model.to(DEVICE),
-        x_data = x_data.to(DEVICE),
-        y_data = y_data.to(DEVICE),
+        model = model,
+        data_loader = data_loader,
+        device=DEVICE,
         class_name = class_name
     )
 
-    print(f"Images number = {TEST_IMG_NUM}")
+    if data_loader is not None:
+        print(f"Images number = {args.imagenet_validation_size}")
 
-    # Get orignal accuracy
-    top_1, top_5 = atk_analysis.get_predict()
-    # Get the original classification of the input image
+    # Collect the accuracy of the clean floating-point model and the classification results for all inputs.
+    top_1, top_5 = atk_analysis.predict()
     categories = atk_analysis.get_topX_categories()
 
-    print(f"Orignal top1 accuracy = {top_1}, top5 accuracy = {top_5}")
-    print(f"Orignal categories: {categories}")
+    print(f"Fp32: clean top1 accuracy = {top_1}, top5 accuracy = {top_5}")
+    print(f"Fp32: clean categories: {get_first_n_items(categories)}")
 
 
     print("\nStart attack")
-    atk_analysis.set_attack_info('./attack_result/ResNet-18/n03530642 honeycomb.json')
-
+    # Collect the accuracy of the malicious floating-point model and the classification results for all inputs.
+    atk_analysis.set_attack_info('./attack_result/' + args.model + '/' + args.targeted_category + '.json')
     atk_analysis.attack()
 
-    malicious_top1, malicious_top5 = atk_analysis.get_predict()
+    malicious_top1, malicious_top5 = atk_analysis.predict()
     categories = atk_analysis.get_topX_categories()
 
-    if args.verbose is not True:
-        atk_analysis.print_attack_config()
-    print(f"malicious top1 accuracy = {malicious_top1}, top5 accuracy = {malicious_top5}")
-    print(f"malicious categories: {categories}")
+    atk_analysis.print_attack_config()
+    print(f"Fp32: malicious top1 accuracy = {malicious_top1}, top5 accuracy = {malicious_top5}")
+    print(f"Fp32: malicious categories: {get_first_n_items(categories)}")
 
-    pass
+    num_different_params = compare_models(atk_analysis.model, get_model(args.model).eval().to(DEVICE))
+    print(f"\nFp32: Compare malicious model and clean model, number of different parameters =  {num_different_params}")
+
+
+    clean_file_path = './ModelQuantization/' + args.model + '/clean_model.onnx'
+    malicious_file_path = args.model + '_malicious_model.onnx'
+
+    # Quantize the malicious parameters and overwrite the corresponding values in the quantized model.
+    atk_analysis.add_quant_model(clean_file_path)
+
+    atk_analysis.attack(quant=True, output_file=malicious_file_path)
+
+    atk_analysis.print_attack_config()
+
+    top_1, top_5 = atk_analysis.predict(quant=True, file_path=clean_file_path)
+    categories = atk_analysis.get_topX_categories(quant=True, file_path=clean_file_path)
+
+    print(f"\nQuantized: clean top1 accuracy = {top_1}, top5 accuracy = {top_5}")
+    print(f"Quantized: clean categories: {get_first_n_items(categories)}")
+
+    malicious_top1, malicious_top5 = atk_analysis.predict(quant=True, file_path=malicious_file_path)
+    categories = atk_analysis.get_topX_categories(quant=True, file_path=malicious_file_path)
+    print(f"Quantized: malicious top1 accuracy = {malicious_top1}, top5 accuracy = {malicious_top5}")
+    print(f"Quantized: malicious categories: {get_first_n_items(categories)}")
+
+    print("Save malicious model...")
+    torch.save(atk_analysis.model, args.model + '_malicious_model.pth')
+
+    print("Finish")
+
 
 

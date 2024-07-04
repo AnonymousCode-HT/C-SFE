@@ -10,22 +10,40 @@ from PIL import Image
 from ultralytics import YOLO
 
 avaliable_model = [
-    'Resnet-18',
+    'ResNet-18',
     'VGG-16',
     'YOLOv8m-cls'
 ]
 
+class ShowAttackCategories(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        attack_dir = f'./attack_result/{values}'
+        if not os.path.exists(attack_dir):
+            print(f"The directory {attack_dir} does not exist.")
+            parser.exit()
+        files = os.listdir(attack_dir)
+        attack_categories = [file.replace('.json', '') for file in files if file.endswith('.json')]
+        print("Available attack categories:")
+        for category in attack_categories:
+            print(category)
+        parser.exit()
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='co-attack C-SFE verifier')
-    parser.add_argument("-m", "--model", default="Resnet-18", help="Input model name", type=str, choices=avaliable_model)
-    parser.add_argument("-v", "--verbose", help="increase output verbosity", action="store_true")
+    parser = argparse.ArgumentParser(description='C-SFE verifier')
+    parser.add_argument("-m", "--model", default="ResNet-18", help="Input model name", type=str, choices=avaliable_model)
+    parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
+    parser.add_argument("-c", "--show-attack-categories", help="Show available attack categories", action=ShowAttackCategories, type=str, metavar="MODEL_NAME")
+    parser.add_argument("-t", "--targeted_category", default="n03530642 honeycomb", help="Attack category", type=str)
+    parser.add_argument("-i", "--input_image", default="./images/dog.jpg", help="Single input image", type=str)
+    parser.add_argument("--validation_path", default="./ILSVRC2012_img_val/", help="Imagenet validation path", type=str)
+    parser.add_argument("-s", "--validation_size", default=200, help="How many images are used in the validation dataset", type=int)
 
     return parser.parse_args()
 
 
 def get_model(model_name):
     model_mapping = {
-        'Resnet-18': models.resnet18(weights=True),
+        'ResNet-18': models.resnet18(weights=True),
         'VGG-16': models.vgg16(weights=True),
         'YOLOv8m-cls': YOLO("yolov8m-cls.pt")
     }
@@ -38,13 +56,17 @@ def get_model(model_name):
         raise ValueError(f"Model {model_name} is not recognized. Please choose from {list(model_mapping.keys())}")
 
 
-def get_image(image_num, dataset_dir, val_file_path, target_class=-1):
+def get_image(batch_size, image_num, dataset_dir, val_file_path, target_class=-1):
     transform = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+
+    if not os.path.exists(dataset_dir):
+        print(f"The dataset directory {dataset_dir} does not exist. Only generating malicious model without testing.")
+        return None
 
     val_dataset = ImageNetValDataset(root_dir=dataset_dir, val_txt_path=val_file_path, transform=transform)
     indices = []
@@ -55,14 +77,9 @@ def get_image(image_num, dataset_dir, val_file_path, target_class=-1):
     else:
         indices = np.random.choice(len(val_dataset), image_num, replace=False)
     test_subset = Subset(val_dataset, indices)
-    testloader = torch.utils.data.DataLoader(test_subset, batch_size=image_num, shuffle=True, num_workers=16)
+    data_loader = torch.utils.data.DataLoader(test_subset, batch_size=batch_size, shuffle=False, num_workers=16)
 
-    x_data = 0
-    y_data = 0
-    for data in testloader:
-        x_data, y_data = data[0], data[1]
-
-    return x_data, y_data
+    return data_loader
 
 class ImageNetValDataset(Dataset):
     def __init__(self, root_dir, val_txt_path, transform=None):
@@ -89,3 +106,46 @@ class ImageNetValDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         return image, label
+
+def compare_models(model1, model2):
+    different_params_count = 0
+
+    for (name1, param1), (name2, param2) in zip(model1.named_parameters(), model2.named_parameters()):
+        if name1 != name2:
+            print(f"Parameter names differ: {name1} vs {name2}")
+            different_params_count += param1.numel()
+            continue
+        difference = torch.ne(param1, param2)
+        different_params_count += difference.sum().item()
+
+    return different_params_count
+
+
+def round_tensor(tensor):
+    return tensor.round().int()
+
+
+def hamming_distance_int8(a, b):
+    a &= 0xFF
+    b &= 0xFF
+
+    xor_result = a ^ b
+    hamming_distance = bin(xor_result).count('1')
+
+    return hamming_distance
+
+
+def hamming_distance(list_a, list_b):
+    if len(list_a) != len(list_b):
+        raise ValueError("Input lists must have the same length")
+
+    hamming_distances = [hamming_distance_int8(a, b) for a, b in zip(list_a, list_b)]
+
+    return hamming_distances
+
+
+def get_first_n_items(d, n=5):
+    if d == {}:
+        return {}
+
+    return dict(list(d.items())[:n])

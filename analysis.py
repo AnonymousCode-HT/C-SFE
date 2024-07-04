@@ -1,16 +1,20 @@
 import torch
 import json
 import os
-from collections import Counter
 import copy
-import numpy as np
+import re
+import pandas as pd
+import onnxruntime as ort
+import onnx.numpy_helper as numpy_helper
+import math
+import onnx
+from collections import Counter
+from utils import *
 
 
 class attack_analysis():
-    def __init__(self, model, x_data, y_data, class_name, json_data=None, dna_size=0, attack_layers=None):
-        self.model = model
-        self.x_data = x_data
-        self.y_data = y_data
+    def __init__(self, model, class_name, json_data=None, dna_size=0, attack_layers=None, quant_model=None, data_loader=None, device='cpu'):
+        self.model = model.to(device)
         self.class_name = class_name
         self.json_data = json_data
         self.dna_size = dna_size
@@ -18,19 +22,58 @@ class attack_analysis():
         self.orgLayerWeight = None
         self.attack_config_list = None
         self.malicious_params = None
+        self.attack_layers_onnx = None
+        self.data_loader = data_loader
+        self.device = device
 
-    def get_predict(self):
+        self.quant_model = quant_model
+        self.quant_file_path = None
+        self.bn_scales = []
+        self.quant_scales = []
+        self.quant_clean_params = []
+        self.quant_malicious_params = []
+
+    def predict(self, quant=False, file_path=None):
         total = 0
         top1_correct = 0
         top5_correct = 0
-        with torch.no_grad():
-            outputs = self.model(self.x_data)
-            _, predicted = torch.max(outputs, 1)
-            total += self.y_data.size(0)
-            top1_correct += (predicted == self.y_data).sum().item()
 
-            _, predicted_top5 = torch.topk(outputs, 5, dim=1)
-            top5_correct += sum(self.y_data[i].item() in predicted_top5[i] for i in range(self.y_data.size(0)))
+        if self.data_loader is None:
+            print("Validation data is None, skipping accuracy calculation.")
+            return -1, -1
+
+        if quant is True:
+            session = ort.InferenceSession(file_path)
+            input_name = session.get_inputs()[0].name
+            for x_data, y_data in self.data_loader:
+                x_data_numpy = x_data.numpy()
+                y_data_numpy = y_data.numpy()
+                for i in range(len(x_data_numpy)):
+                    single_input = np.expand_dims(x_data_numpy[i], axis=0)
+                    outputs = session.run(None, {input_name: single_input})
+                    output_array = np.array(outputs[0])
+
+                    top1_correct += np.sum(np.argmax(output_array, axis=1) == y_data_numpy[i])
+
+                    top_5_predictions = np.argsort(output_array, axis=1)[:, -5:]
+                    if y_data_numpy[i] in top_5_predictions[0]:
+                        top5_correct += 1
+
+                    total += 1
+        else:
+            self.model.to(self.device)
+            self.model.eval()
+            with torch.no_grad():
+                for x_data, y_data in self.data_loader:
+                    x_data = x_data.to(self.device)
+                    y_data = y_data.to(self.device)
+                    outputs = self.model(x_data)
+                    _, predicted = torch.max(outputs, 1)
+                    total += y_data.size(0)
+                    top1_correct += (predicted == y_data).sum().item()
+
+                    _, predicted_top5 = torch.topk(outputs, 5, dim=1)
+                    top5_correct += sum(y_data[i].item() in predicted_top5[i] for i in range(y_data.size(0)))
 
         top1_accuracy = top1_correct / total
         top5_accuracy = top5_correct / total
@@ -38,13 +81,34 @@ class attack_analysis():
         return top1_accuracy, top5_accuracy
 
 
-    def get_topX_categories(self, topNum=50):
+    def get_topX_categories(self, top_num=50, quant=False, file_path=None):
         result_list = []
-        with torch.no_grad():
-            outputs = self.model(self.x_data)
-            _, predicted = torch.max(outputs, 1)
-            result_list.extend(predicted.tolist())
-        catego = Counter(result_list).most_common(topNum)
+
+        if self.data_loader is None:
+            print("Validation data is None, skipping categories calculation.")
+            return {}
+
+        if quant is True:
+            session = ort.InferenceSession(file_path)
+            input_name = session.get_inputs()[0].name
+            for x_data, _ in self.data_loader:
+                x_data_numpy = x_data.numpy()
+                for i in range(len(x_data_numpy)):
+                    single_input = np.expand_dims(x_data_numpy[i], axis=0)
+                    outputs = session.run(None, {input_name: single_input})
+                    output_array = np.array(outputs[0])
+                    _, predicted = torch.max(torch.tensor(output_array), 1)
+                    result_list.extend(predicted.tolist())
+        else:
+            self.model.to(self.device)
+            with torch.no_grad():
+                for x_data, _ in self.data_loader:
+                    x_data = x_data.to(self.device)
+                    outputs = self.model(x_data)
+                    _, predicted = torch.max(outputs, 1)
+                    result_list.extend(predicted.tolist())
+
+        catego = Counter(result_list).most_common(top_num)
         categoriesDict = {}
         class_list = self.class_name[:]
 
@@ -57,16 +121,15 @@ class attack_analysis():
 
         return categoriesDict
 
-
-    def set_attack_configs(self, attack_configs):
+    def __set_attack_configs(self, attack_configs):
         self.attack_config_list = attack_configs
 
 
-    def set_malicious_params(self, malicious_params):
+    def __set_malicious_params(self, malicious_params):
         self.malicious_params = malicious_params
 
 
-    def read_json(self, filename):
+    def __read_json(self, filename):
 
         if not os.path.exists(filename):
             raise FileNotFoundError(f"File {filename} does not exist")
@@ -97,38 +160,63 @@ class attack_analysis():
 
 
     def set_attack_info(self, file):
-        self.read_json(file)
+        self.__read_json(file)
         attack_configs = self.json_data['member_0']['kernel_idx']
         attack_params = self.json_data['member_0']['bestAttackedWeight']
-        attack_layers = list({item[4] for item in attack_configs})
+        attack_layers = list(dict.fromkeys(item[4] for item in attack_configs))
 
-        self.set_attack_configs(attack_configs)
-        self.set_malicious_params(attack_params)
-        self.set_atk_layer(attack_layers)
+        self.__set_attack_configs(attack_configs)
+        self.__set_malicious_params(attack_params)
+        self.__set_atk_layer(attack_layers)
 
-
-    def set_atk_layer(self, attack_layers):
+    def __set_atk_layer(self, attack_layers):
         self.attack_layers = attack_layers
         self.orgLayerWeight = self.__get_layer_weight()
 
     def print_attack_config(self):
+        # 提取攻击层的信息
         attack_layers = list({item[4] for item in self.attack_config_list})
-        print(f"Total attack kernel number = {len(attack_layers)}. Total attack element number = {len(self.attack_config_list)}")
-        layers = {}
+        total_attack_kernels = len(attack_layers)
+        total_attack_elements = len(self.attack_config_list)
+        print(f"\nTotal attack kernel number = {total_attack_kernels}. Total attack element number = {total_attack_elements}")
+
+        data = {
+            'Layer': [],
+            'Filter Index': [],
+            'Kernel Index': [],
+            'Element Index': []
+        }
+
         for item in self.attack_config_list:
             layer = item[4]
             filter_index = item[2]
             kernel_index = item[3]
             elem_index = item[6]
 
-            key = (layer, filter_index, kernel_index)
-            if key not in layers:
-                layers[key] = []
-            layers[key].append(elem_index)
+            data['Layer'].append(layer)
+            data['Filter Index'].append(filter_index)
+            data['Kernel Index'].append(kernel_index)
+            data['Element Index'].append(elem_index)
 
-        for (layer, filter_index, kernel_index), elem_indices in layers.items():
-            elem_str = ', '.join([f'elem_index#{i + 1} = {elem}' for i, elem in enumerate(elem_indices)])
-            print(f"Attack {layer}, filter index= {filter_index}, kernel index= {kernel_index},\n    {elem_str}")
+        if self.quant_clean_params != [] and self.quant_malicious_params != []:
+            data['clean_int8'] = self.quant_clean_params
+            data['malicious_int8'] = self.quant_malicious_params
+            data['hamming distance'] = hamming_distance(self.quant_clean_params, self.quant_malicious_params)
+
+        df = pd.DataFrame(data)
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.width', 1000)
+        pd.set_option('display.max_colwidth', None)
+        print(df)
+
+
+
+    def get_attacked_params(self, quant=False):
+        if quant is True:
+            return self.quant_clean_params, self.quant_malicious_params
+        else:
+            return self.malicious_params
+
 
     def recover(self):
         for layer_idx in range(len(self.attack_layers)):
@@ -136,14 +224,13 @@ class attack_analysis():
             layer_param.data.copy_(self.orgLayerWeight[layer_idx])
 
 
-    def kernel_swap(self, dna, recover=True):
+    def __kernel_swap(self, dna, recover=True):
         layer_param_dict = {}
 
         if recover is True:
             self.recover()
 
         for layer_idx in range(len(self.attack_layers)):
-            # get filter
             layer_param_dict[self.attack_layers[layer_idx]] = (dict(self.model.named_parameters()).get(self.attack_layers[layer_idx] + '.weight'))
 
         attack_config_num = len(self.attack_config_list)
@@ -175,16 +262,130 @@ class attack_analysis():
 
                     dna_start_pos += attack_weight_size
 
-    def attack(self):
-        self.kernel_swap(self.malicious_params)
+    def __convert_layer_name(self, layer_name):
+        pattern = r'(layer\d+)\.(\d+)\.(conv\d+)'
+        return re.sub(pattern, r'/\1/\1.\2/\3/Conv_quant', layer_name)
 
-    def set_dna_size(self):
-        pass
+    def add_quant_model(self, file_path):
+        self.quant_model = onnx.load(file_path)
+        self.quant_file_path = file_path
+        self.attack_layers_onnx = [self.__convert_layer_name(name) for name in self.attack_layers]
+        self.__get_bn_and_quant_scale()
 
-    def get_hamming_distance(self):
-        pass
+    def __get_next_layer(self, layer_name):
+        layer_name_list = [name for name, _ in self.model.named_modules()]
+        try:
+            index = layer_name_list.index(layer_name)
+        except ValueError:
+            return None
 
-    def k_sim(self):
-        pass
+        if index + 1 < len(layer_name_list):
+            next_layer_name = layer_name_list[index + 1]
+            return dict(self.model.named_modules())[next_layer_name]
+        else:
+            return None
+
+    def __get_node_info(self, model, node):
+        weights = {}
+        for input_name in node.input:
+            for initializer in model.graph.initializer:
+                if initializer.name == input_name:
+                    weights[input_name] = onnx.numpy_helper.to_array(initializer)
+        return weights
+
+    def __find_node_by_name(self, model, node_name):
+        for node in model.graph.node:
+            if node.name == node_name:
+                return self.__get_node_info(model, node)
+        return None
 
 
+    def __make_malicious_model(self, file_path):
+        layer_idx = 0
+        current_layer = self.attack_config_list[0][4]
+        idx = 0
+        for attack_config in self.attack_config_list:
+            target_layer_onnx_list = []
+            for layer_onnx_name in self.attack_layers_onnx:
+                target_layer_onnx_list.append(list(self.__find_node_by_name(self.quant_model, layer_onnx_name).items()))
+
+            if attack_config[4] != current_layer:
+                layer_idx = layer_idx + 1
+                current_layer = attack_config[4]
+
+            filter_idx = attack_config[2]
+            kernel_idx = attack_config[3]
+            elem_idx = attack_config[-1]
+
+            quant_weight = target_layer_onnx_list[layer_idx][2][1]
+            target_quant_weight = quant_weight[filter_idx][kernel_idx].flatten()[elem_idx]
+
+            mali_value = self.malicious_params[idx]
+            quant_mali_value = round_tensor((self.bn_scales[idx] * mali_value).cpu() / self.quant_scales[idx])
+
+
+            self.quant_clean_params.append(target_quant_weight)
+            self.quant_malicious_params.append(quant_mali_value.tolist())
+
+            quant_weight = quant_weight.copy()
+            kernel_shape = quant_weight.shape[2]
+            target_kernel = quant_weight[filter_idx][kernel_idx].flatten()
+            target_kernel[elem_idx] = quant_mali_value
+            target_kernel = target_kernel.reshape(kernel_shape, kernel_shape)
+            quant_weight[filter_idx][kernel_idx] = target_kernel
+
+            for initializer in self.quant_model.graph.initializer:
+                if initializer.name == target_layer_onnx_list[layer_idx][2][0]:
+                    new_initializer = numpy_helper.from_array(quant_weight, initializer.name)
+                    self.quant_model.graph.initializer.remove(initializer)
+                    self.quant_model.graph.initializer.append(new_initializer)
+                    break
+            idx += 1
+
+        if file_path is not None:
+            onnx.save(self.quant_model, file_path)
+
+    #
+    def __get_bn_and_quant_scale(self):
+        """
+            This function retrieves the batch normalization (BN) scales and quantization scales
+            for the layers specified in the attack configuration. Since ONNX version 7 and above
+            defaults to fusing BN and convolution layers, it is necessary to obtain the scales
+            for both BN and convolution layers simultaneously.
+        """
+        bn_layers = []
+        for layer in self.attack_layers:
+            bn_layers.append(self.__get_next_layer(layer).state_dict())
+
+        layer_idx = 0
+        epsilon = 1e-6
+        current_layer = self.attack_config_list[0][4]
+        for attack_config in self.attack_config_list:
+            target_layer_onnx_list = []
+            for layer_onnx_name in self.attack_layers_onnx:
+                target_layer_onnx_list.append(list(self.__find_node_by_name(self.quant_model, layer_onnx_name).items()))
+
+            if attack_config[4] != current_layer:
+                layer_idx = layer_idx + 1
+                current_layer = attack_config[4]
+
+            filter_idx = attack_config[2]
+
+            if not bn_layers[layer_idx]:
+                self.bn_scales.append(torch.tensor(1))
+            else:
+                bn_params = bn_layers[layer_idx]
+                bn_scale_1 = (1 / math.sqrt(bn_params['running_var'][filter_idx] - epsilon))
+                bn_scale_2 = bn_params['weight'][filter_idx]
+                bn_scale = bn_scale_1 * bn_scale_2
+                self.bn_scales.append(bn_scale)
+
+            quant_scale = target_layer_onnx_list[layer_idx][3][1]
+            self.quant_scales.append(quant_scale)
+
+
+    def attack(self, quant=False, output_file=None):
+        if quant is True:
+            self.__make_malicious_model(output_file)
+        else:
+            self.__kernel_swap(self.malicious_params)
