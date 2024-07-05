@@ -11,8 +11,8 @@ from ultralytics import YOLO
 
 avaliable_model = [
     'ResNet-18',
-    'VGG-16',
-    'YOLOv8m-cls'
+   # 'VGG-16',
+  #  'YOLOv8m-cls'
 ]
 
 class ShowAttackCategories(argparse.Action):
@@ -44,8 +44,8 @@ def parse_arguments():
 def get_model(model_name):
     model_mapping = {
         'ResNet-18': models.resnet18(weights=True),
-        'VGG-16': models.vgg16(weights=True),
-        'YOLOv8m-cls': YOLO("yolov8m-cls.pt")
+      #  'VGG-16': models.vgg16(weights=True),
+     #   'YOLOv8m-cls': YOLO("yolov8m-cls.pt")
     }
 
     model_mapping = {key: model_mapping[key] for key in avaliable_model if key in model_mapping}
