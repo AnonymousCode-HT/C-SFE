@@ -1,4 +1,4 @@
-numpy==2.0.0
+numpy==1.26.4
 onnx==1.14.1
 onnxoptimizer==0.3.13
 onnxruntime==1.18.0
