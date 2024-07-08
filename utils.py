@@ -35,8 +35,7 @@ def parse_arguments():
     parser.add_argument("-c", "--show-attack-categories", help="Show available attack categories", action=ShowAttackCategories, type=str, metavar="MODEL_NAME")
     parser.add_argument("-t", "--targeted_category", default="n03530642 honeycomb", help="Attack category", type=str)
     parser.add_argument("-i", "--input_image", default="./images/dog.jpg", help="Single input image", type=str)
-    # parser.add_argument("--validation_path", default="./ILSVRC2012_img_val/", help="Imagenet validation path", type=str)
-    parser.add_argument("--validation_path", default="/home/chguo/Desktop/HT/val/ILSVRC2012_img_val/", help="Imagenet validation path", type=str)
+    parser.add_argument("--validation_path", default="./ILSVRC2012_img_val/", help="Imagenet validation path", type=str)
     parser.add_argument("-s", "--validation_size", default=100, help="How many images are used in the validation dataset", type=int)
 
     return parser.parse_args()
