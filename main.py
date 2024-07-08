@@ -13,6 +13,11 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     model = get_model(args.model)
+    ''' When the user does not provide the path to a validation dataset, main.py is only responsible for generating the malicious model and will not perform prediction. 
+    For YOLOv8, if a prediction is not made, it will not be in eval mode. Therefore, it is forced to predict on a single image.
+    '''
+    if 'YOLO' in args.model:
+        results = model("https://ultralytics.com/images/bus.jpg")
 
     data_loader = get_image(BATCH_SIZE, args.validation_size, args.validation_path, args.model, VAL_FILE_PTAH)
 
