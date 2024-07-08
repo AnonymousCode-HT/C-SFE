@@ -11,8 +11,8 @@ from ultralytics import YOLO
 
 avaliable_model = [
     'ResNet-18',
-   # 'VGG-16',
-  #  'YOLOv8m-cls'
+    # 'VGG-16',
+    'YOLOv8m-cls'
 ]
 
 class ShowAttackCategories(argparse.Action):
@@ -35,17 +35,18 @@ def parse_arguments():
     parser.add_argument("-c", "--show-attack-categories", help="Show available attack categories", action=ShowAttackCategories, type=str, metavar="MODEL_NAME")
     parser.add_argument("-t", "--targeted_category", default="n03530642 honeycomb", help="Attack category", type=str)
     parser.add_argument("-i", "--input_image", default="./images/dog.jpg", help="Single input image", type=str)
-    parser.add_argument("--validation_path", default="./ILSVRC2012_img_val/", help="Imagenet validation path", type=str)
-    parser.add_argument("-s", "--validation_size", default=200, help="How many images are used in the validation dataset", type=int)
+    # parser.add_argument("--validation_path", default="./ILSVRC2012_img_val/", help="Imagenet validation path", type=str)
+    parser.add_argument("--validation_path", default="/home/chguo/Desktop/HT/val/ILSVRC2012_img_val/", help="Imagenet validation path", type=str)
+    parser.add_argument("-s", "--validation_size", default=100, help="How many images are used in the validation dataset", type=int)
 
     return parser.parse_args()
 
 
 def get_model(model_name):
     model_mapping = {
-        'ResNet-18': models.resnet18(weights=True),
-      #  'VGG-16': models.vgg16(weights=True),
-     #   'YOLOv8m-cls': YOLO("yolov8m-cls.pt")
+        'ResNet-18': models.resnet18(weights=True).eval(),
+        # 'VGG-16': models.vgg16(weights=True),
+        'YOLOv8m-cls': YOLO("yolov8m-cls.pt")
     }
 
     model_mapping = {key: model_mapping[key] for key in avaliable_model if key in model_mapping}
@@ -56,17 +57,25 @@ def get_model(model_name):
         raise ValueError(f"Model {model_name} is not recognized. Please choose from {list(model_mapping.keys())}")
 
 
-def get_image(batch_size, image_num, dataset_dir, val_file_path, target_class=-1):
-    transform = transforms.Compose([
+def get_image(batch_size, image_num, dataset_dir, model, val_file_path, target_class=-1):
+    transform_normal = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
+    transform_yolov8 = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+    ])
+
     if not os.path.exists(dataset_dir):
         print(f"The dataset directory {dataset_dir} does not exist. Only generating malicious model without testing.")
         return None
+
+    transform = transform_normal if 'YOLO' not in model else transform_yolov8
 
     val_dataset = ImageNetValDataset(root_dir=dataset_dir, val_txt_path=val_file_path, transform=transform)
     indices = []

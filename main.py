@@ -6,18 +6,19 @@ warnings.filterwarnings("ignore", category=UserWarning, module='torchvision.mode
 
 VAL_FILE_PTAH = './val.txt'
 LABELS = './synset_words.txt'
-BATCH_SIZE = 10
+BATCH_SIZE = 100
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 if __name__ == '__main__':
     args = parse_arguments()
 
-    model = get_model(args.model).eval()
+    model = get_model(args.model)
 
-    data_loader = get_image(BATCH_SIZE, args.validation_size, args.validation_path, VAL_FILE_PTAH)
+    data_loader = get_image(BATCH_SIZE, args.validation_size, args.validation_path, args.model, VAL_FILE_PTAH)
 
     class_name = np.loadtxt(LABELS, str, delimiter='\t').tolist()
     atk_analysis = attack_analysis(
+        model_name = args.model,
         model = model,
         data_loader = data_loader,
         device=DEVICE,
@@ -46,10 +47,6 @@ if __name__ == '__main__':
     atk_analysis.print_attack_config()
     print(f"Fp32: malicious top1 accuracy = {malicious_top1}, top5 accuracy = {malicious_top5}")
     print(f"Fp32: malicious categories: {get_first_n_items(categories)}")
-
-    num_different_params = compare_models(atk_analysis.model, get_model(args.model).eval().to(DEVICE))
-    print(f"\nFp32: Compare malicious model and clean model, number of different parameters =  {num_different_params}")
-
 
     clean_file_path = './ModelQuantization/' + args.model + '/clean_model.onnx'
     malicious_file_path = args.model + '_malicious_model.onnx'

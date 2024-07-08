@@ -1,6 +1,4 @@
-import torch
 import json
-import os
 import copy
 import re
 import pandas as pd
@@ -13,7 +11,8 @@ from utils import *
 
 
 class attack_analysis():
-    def __init__(self, model, class_name, json_data=None, dna_size=0, attack_layers=None, quant_model=None, data_loader=None, device='cpu'):
+    def __init__(self, model_name, model, class_name, json_data=None, dna_size=0, attack_layers=None, quant_model=None, data_loader=None, device='cpu'):
+        self.model_name = model_name
         self.model = model.to(device)
         self.class_name = class_name
         self.json_data = json_data
@@ -60,20 +59,33 @@ class attack_analysis():
                         top5_correct += 1
 
                     total += 1
-        else:
+        else :
             self.model.to(self.device)
-            self.model.eval()
             with torch.no_grad():
                 for x_data, y_data in self.data_loader:
                     x_data = x_data.to(self.device)
                     y_data = y_data.to(self.device)
-                    outputs = self.model(x_data)
-                    _, predicted = torch.max(outputs, 1)
-                    total += y_data.size(0)
-                    top1_correct += (predicted == y_data).sum().item()
+                    if 'YOLO' in self.model_name:
+                        outputs = self.model(x_data, verbose=False)
+                        detected_classes = []
+                        for result in outputs:
+                            detected_classes.append([result.probs.top1, result.probs.top5])
 
-                    _, predicted_top5 = torch.topk(outputs, 5, dim=1)
-                    top5_correct += sum(y_data[i].item() in predicted_top5[i] for i in range(y_data.size(0)))
+                        for detected_class, true_class in zip(detected_classes, y_data):
+                            total += 1
+                            if detected_class[0] == true_class:
+                                top1_correct += 1
+
+                            if true_class in detected_class[1]:
+                                top5_correct += 1
+                    else:
+                        outputs = self.model(x_data)
+                        _, predicted = torch.max(outputs, 1)
+                        total += y_data.size(0)
+                        top1_correct += (predicted == y_data).sum().item()
+
+                        _, predicted_top5 = torch.topk(outputs, 5, dim=1)
+                        top5_correct += sum(y_data[i].item() in predicted_top5[i] for i in range(y_data.size(0)))
 
         top1_accuracy = top1_correct / total
         top5_accuracy = top5_correct / total
@@ -104,9 +116,14 @@ class attack_analysis():
             with torch.no_grad():
                 for x_data, _ in self.data_loader:
                     x_data = x_data.to(self.device)
-                    outputs = self.model(x_data)
-                    _, predicted = torch.max(outputs, 1)
-                    result_list.extend(predicted.tolist())
+                    if 'YOLO' in self.model_name:
+                        outputs = self.model(x_data, verbose=False)
+                        for result in outputs:
+                            result_list.append(result.probs.top1)
+                    else:
+                        outputs = self.model(x_data)
+                        _, predicted = torch.max(outputs, 1)
+                        result_list.extend(predicted.tolist())
 
         catego = Counter(result_list).most_common(top_num)
         categoriesDict = {}
@@ -262,8 +279,12 @@ class attack_analysis():
                     dna_start_pos += attack_weight_size
 
     def __convert_layer_name(self, layer_name):
-        pattern = r'(layer\d+)\.(\d+)\.(conv\d+)'
-        return re.sub(pattern, r'/\1/\1.\2/\3/Conv_quant', layer_name)
+        if 'YOLO' in self.model_name:
+            pattern = r'model\.model\.(\d+)\.m\.(\d+)\.(cv\d+)\.conv'
+            return re.sub(pattern, r'/model.\1/m.\2/\3/conv/Conv_quant', layer_name)
+        else:
+            pattern = r'(layer\d+)\.(\d+)\.(conv\d+)'
+            return re.sub(pattern, r'/\1/\1.\2/\3/Conv_quant', layer_name)
 
     def add_quant_model(self, file_path):
         self.quant_model = onnx.load(file_path)
@@ -272,7 +293,12 @@ class attack_analysis():
         self.__get_bn_and_quant_scale()
 
     def __get_next_layer(self, layer_name):
-        layer_name_list = [name for name, _ in self.model.named_modules()]
+        '''
+        During inference, the BN layers of YOLOv8 are fused into the conv layers. Therefore, reloading the model uniformly here is only to obtain the BN parameters.
+        '''
+        tmp_model = get_model(self.model_name)
+        layer_name_list = [name for name, _ in tmp_model.named_modules()]
+        # layer_name_list = [name for name, _ in self.model.named_modules()]
         try:
             index = layer_name_list.index(layer_name)
         except ValueError:
@@ -280,7 +306,7 @@ class attack_analysis():
 
         if index + 1 < len(layer_name_list):
             next_layer_name = layer_name_list[index + 1]
-            return dict(self.model.named_modules())[next_layer_name]
+            return dict(tmp_model.named_modules())[next_layer_name]
         else:
             return None
 
@@ -370,7 +396,7 @@ class attack_analysis():
 
             filter_idx = attack_config[2]
 
-            if not bn_layers[layer_idx]:
+            if not bn_layers[layer_idx] or 'YOLO' in self.model_name:
                 self.bn_scales.append(torch.tensor(1))
             else:
                 bn_params = bn_layers[layer_idx]
