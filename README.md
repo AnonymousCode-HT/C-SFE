@@ -45,7 +45,7 @@ python main.py -m YOLOv8m-cls --validation_path <path_to_ILSVRC2012>/ILSVRC2012_
 
 ## To attack other categories
 The `attack_result/` directory contains the currently available attackable categories, which can be viewed using the `-c` option.
-```bash
+```
 python main.py -c ResNet-18
 # Or
 python main.py -c YOLOv8m-cls
@@ -68,45 +68,46 @@ python test.py -m YOLOv8m-cls -i ./images/dog.jpg
 $ python main.py -t 'n03530642 honeycomb' -m YOLOv8m-cls --validation_path ./ILSVRC2012_img_val/ -s 200
 
 Found https://ultralytics.com/images/bus.jpg locally at bus.jpg
-image 1/1 /home/chguo/PycharmProjects/co-attack_demo/bus.jpg: 224x224 minibus 0.70, police_van 0.20, streetcar 0.03, trolleybus 0.02, amphibian 0.01, 149.6ms
-Speed: 4.9ms preprocess, 149.6ms inference, 0.0ms postprocess per image at shape (1, 3, 224, 224)
+image 1/1 /home/chguo/PycharmProjects/co-attack_demo/bus.jpg: 224x224 minibus 0.70, police_van 0.20, streetcar 0.03, trolleybus 0.02, amphibian 0.01, 152.0ms
+Speed: 5.1ms preprocess, 152.0ms inference, 0.0ms postprocess per image at shape (1, 3, 224, 224)
 Number of images = 200
-Fp32: clean top1 accuracy = 0.77, top5 accuracy = 0.935
-Fp32: clean categories: {'n02123597 Siamese cat, Siamese': 2, 'n03271574 electric fan, blower': 2, 'n03887697 paper towel': 2, 'n03388183 fountain pen': 2, 'n04118538 rugby ball': 2}
+Fp32: clean top1 accuracy = 0.745, top5 accuracy = 0.94
+Fp32: clean categories: {'n01532829 house finch, linnet, Carpodacus mexicanus': 2, 'n01843383 toucan': 2, 'n02007558 flamingo': 2, 'n03868242 oxcart': 2, 'n07565083 menu': 2}
 
 Start attack
 
 Total attack kernel number = 3. Total attack element number = 9
                         Layer  Filter Index  Kernel Index  Element Index
-0  model.model.4.m.3.cv1.conv             0            31              4
-1  model.model.4.m.3.cv1.conv             0            31              1
-2  model.model.4.m.3.cv1.conv             0            31              5
-3  model.model.4.m.2.cv2.conv            31             0              0
-4  model.model.4.m.2.cv2.conv            31             0              2
-5  model.model.4.m.2.cv2.conv            31             0              1
+0  model.model.4.m.3.cv1.conv            27             3              3
+1  model.model.4.m.3.cv1.conv            27             3              4
+2  model.model.4.m.3.cv1.conv            27             3              5
+3  model.model.4.m.2.cv2.conv             3             0              7
+4  model.model.4.m.2.cv2.conv             3             0              8
+5  model.model.4.m.2.cv2.conv             3             0              6
 6  model.model.4.m.2.cv1.conv             0            58              2
 7  model.model.4.m.2.cv1.conv             0            58              0
 8  model.model.4.m.2.cv1.conv             0            58              1
-Fp32: malicious top1 accuracy = 0.0, top5 accuracy = 0.035
-Fp32: malicious categories: {'n03530642 honeycomb': 196, 'n01440764 tench, Tinca tinca': 0, 'n01443537 goldfish, Carassius auratus': 0, 'n01484850 great white shark, white shark, man-eater, man-eating shark, Carcharodon carcharias': 0, 'n01491361 tiger shark, Galeocerdo cuvieri': 0}
+Fp32: malicious top1 accuracy = 0.0, top5 accuracy = 0.005
+Fp32: malicious categories: {'n03443371 goblet': 197, 'n03220513 dome': 1, 'n03877845 palace': 1, 'n02666196 abacus': 1, 'n01440764 tench, Tinca tinca': 0}
 
 Total attack kernel number = 3. Total attack element number = 9
                         Layer  Filter Index  Kernel Index  Element Index  clean_int8  malicious_int8  hamming distance
-0  model.model.4.m.3.cv1.conv             0            31              4         -22             126                 3
-1  model.model.4.m.3.cv1.conv             0            31              1         -18             127                 3
-2  model.model.4.m.3.cv1.conv             0            31              5         -12             127                 4
-3  model.model.4.m.2.cv2.conv            31             0              0         -12             127                 4
-4  model.model.4.m.2.cv2.conv            31             0              2          -7             127                 3
-5  model.model.4.m.2.cv2.conv            31             0              1          -4             126                 2
-6  model.model.4.m.2.cv1.conv             0            58              2         -34             126                 2
+0  model.model.4.m.3.cv1.conv            27             3              3         -11             127                 3
+1  model.model.4.m.3.cv1.conv            27             3              4          -8             120                 1
+2  model.model.4.m.3.cv1.conv            27             3              5          -7             127                 3
+3  model.model.4.m.2.cv2.conv             3             0              7         -12             124                 2
+4  model.model.4.m.2.cv2.conv             3             0              8          -8             125                 3
+5  model.model.4.m.2.cv2.conv             3             0              6          -4             117                 3
+6  model.model.4.m.2.cv1.conv             0            58              2         -34             127                 3
 7  model.model.4.m.2.cv1.conv             0            58              0         -33             127                 2
-8  model.model.4.m.2.cv1.conv             0            58              1         -26             102                 1
+8  model.model.4.m.2.cv1.conv             0            58              1         -26             127                 4
 Total hamming distance = 24
 
-Quantized: clean top1 accuracy = 0.745, top5 accuracy = 0.935
-Quantized: clean categories: {'n04550184 wardrobe, closet, press': 2, 'n02123597 Siamese cat, Siamese': 2, 'n03271574 electric fan, blower': 2, 'n03887697 paper towel': 2, 'n03388183 fountain pen': 2}
-Quantized: malicious top1 accuracy = 0.0, top5 accuracy = 0.015
-Quantized: malicious categories: {'n03530642 honeycomb': 200, 'n01440764 tench, Tinca tinca': 0, 'n01443537 goldfish, Carassius auratus': 0, 'n01484850 great white shark, white shark, man-eater, man-eating shark, Carcharodon carcharias': 0, 'n01491361 tiger shark, Galeocerdo cuvieri': 0}
+Quantized: clean top1 accuracy = 0.745, top5 accuracy = 0.93
+Quantized: clean categories: {'n01532829 house finch, linnet, Carpodacus mexicanus': 2, 'n01843383 toucan': 2, 'n02007558 flamingo': 2, 'n03761084 microwave, microwave oven': 2, 'n07565083 menu': 2}
+Quantized: malicious top1 accuracy = 0.0, top5 accuracy = 0.0
+Quantized: malicious categories: {'n03443371 goblet': 198, 'n03388043 fountain': 1, 'n03877845 palace': 1, 'n01440764 tench, Tinca tinca': 0, 'n01443537 goldfish, Carassius auratus': 0}
 Save malicious model...
 Finish
+
 ```
