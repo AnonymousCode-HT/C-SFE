@@ -224,7 +224,8 @@ class attack_analysis():
         pd.set_option('display.width', 1000)
         pd.set_option('display.max_colwidth', None)
         print(df)
-
+        if data.get('hamming distance') is not None:
+            print(f"Total hamming distance = {np.sum(data['hamming distance'])}")
 
 
     def get_attacked_params(self, quant=False):

@@ -31,7 +31,7 @@ if __name__ == '__main__':
     )
 
     if data_loader is not None:
-        print(f"Images number = {args.validation_size}")
+        print(f"Number of images = {args.validation_size}")
 
     # Collect the accuracy of the clean floating-point model and the classification results for all inputs.
     top_1, top_5 = atk_analysis.predict()
