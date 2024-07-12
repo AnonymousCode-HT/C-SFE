@@ -66,10 +66,6 @@ python test.py -m YOLOv8m-cls -i ./images/dog.jpg
 ## Output example
 ```
 $ python main.py -t 'n03443371 goblet' -m YOLOv8m-cls --validation_path ./ILSVRC2012_img_val/ -s 200
-
-Found https://ultralytics.com/images/bus.jpg locally at bus.jpg
-image 1/1 /home/chguo/PycharmProjects/co-attack_demo/bus.jpg: 224x224 minibus 0.70, police_van 0.20, streetcar 0.03, trolleybus 0.02, amphibian 0.01, 152.0ms
-Speed: 5.1ms preprocess, 152.0ms inference, 0.0ms postprocess per image at shape (1, 3, 224, 224)
 Number of images = 200
 Fp32: clean top1 accuracy = 0.745, top5 accuracy = 0.94
 Fp32: clean categories: {'n01532829 house finch, linnet, Carpodacus mexicanus': 2, 'n01843383 toucan': 2, 'n02007558 flamingo': 2, 'n03868242 oxcart': 2, 'n07565083 menu': 2}
