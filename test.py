@@ -46,7 +46,7 @@ else:
     top5_prob = top5_prob.squeeze()
     top5_catid = top5_catid.squeeze()
 
-print("Clean model result:")
+print("\nClean Model Result:")
 for i in range(len(top5_prob)):
     print(f"Category: {labels[top5_catid[i]]}, Probability: {top5_prob[i].item()}")
 
@@ -61,9 +61,30 @@ else:
     top5_prob = top5_prob.squeeze()
     top5_catid = top5_catid.squeeze()
 
-print("\nmalicious model result:")
+print("\nMalicious FP Model Result:")
+for i in range(len(top5_prob)):
+    print(f"Category: {labels[top5_catid[i]]}, Probability: {top5_prob[i].item()}")
+
+
+import onnxruntime as ort
+file_path = args.model + '_malicious_model.onnx'
+session = ort.InferenceSession(file_path)
+input_name = session.get_inputs()[0].name
+outputs = session.run(None, {input_name: transformed_image.cpu().numpy()})
+
+outputs = outputs[0]
+probabilities = outputs / np.sum(outputs, axis=1, keepdims=True)
+top5_prob = np.sort(probabilities, axis=1)[:, -5:][:, ::-1]
+top5_catid = np.argsort(probabilities, axis=1)[:, -5:][:, ::-1]
+
+top5_prob = np.squeeze(top5_prob)
+top5_catid = np.squeeze(top5_catid)
+
+print("\nMalicious Quant Model Result:")
 for i in range(len(top5_prob)):
     print(f"Category: {labels[top5_catid[i]]}, Probability: {top5_prob[i].item()}")
 
 num_different_params = compare_models(clean_model, malicious_model)
 print(f"\nCompare malicious model and clean model, number of different parameters =  {num_different_params}")
+
+

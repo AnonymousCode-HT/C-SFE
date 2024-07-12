@@ -110,4 +110,30 @@ Quantized: malicious categories: {'n03443371 goblet': 198, 'n03388043 fountain':
 Save malicious model...
 Finish
 
+$ python test.py -m YOLOv8m-cls -i images/dog.jpg
+Test model = YOLOv8m-cls
+Read images/dog.jpg
+
+Clean Model Result:
+Category: n02099712 Labrador retriever, Probability: 0.8247175812721252
+Category: n02099267 flat-coated retriever, Probability: 0.058828290551900864
+Category: n02099429 curly-coated retriever, Probability: 0.023523811250925064
+Category: n02105412 kelpie, Probability: 0.01811697706580162
+Category: n02089078 black-and-tan coonhound, Probability: 0.017459852620959282
+
+Malicious FP Model Result:
+Category: n03443371 goblet, Probability: 0.9998925924301147
+Category: n02666196 abacus, Probability: 6.291417230386287e-05
+Category: n03109150 corkscrew, bottle screw, Probability: 1.4275145076680928e-05
+Category: n04591713 wine bottle, Probability: 8.616713785158936e-06
+Category: n04380533 table lamp, Probability: 3.5992884477309417e-06
+
+Malicious Quant Model Result:
+Category: n03443371 goblet, Probability: 0.9999963045120239
+Category: n03109150 corkscrew, bottle screw, Probability: 1.7092676216634572e-06
+Category: n02666196 abacus, Probability: 6.54071413919155e-07
+Category: n04591713 wine bottle, Probability: 5.52320329916256e-07
+Category: n03018349 china cabinet, china closet, Probability: 2.0467432193527202e-07
+
+Compare malicious model and clean model, number of different parameters =  9
 ```
