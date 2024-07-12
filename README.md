@@ -65,7 +65,7 @@ python test.py -m YOLOv8m-cls -i ./images/dog.jpg
 
 ## Output example
 ```
-$ python main.py -t 'n03530642 honeycomb' -m YOLOv8m-cls --validation_path ./ILSVRC2012_img_val/ -s 200
+$ python main.py -t 'n03443371 goblet' -m YOLOv8m-cls --validation_path ./ILSVRC2012_img_val/ -s 200
 
 Found https://ultralytics.com/images/bus.jpg locally at bus.jpg
 image 1/1 /home/chguo/PycharmProjects/co-attack_demo/bus.jpg: 224x224 minibus 0.70, police_van 0.20, streetcar 0.03, trolleybus 0.02, amphibian 0.01, 152.0ms
