@@ -72,8 +72,11 @@ session = ort.InferenceSession(file_path)
 input_name = session.get_inputs()[0].name
 outputs = session.run(None, {input_name: transformed_image.cpu().numpy()})
 
-outputs = outputs[0]
-probabilities = outputs / np.sum(outputs, axis=1, keepdims=True)
+output = outputs[0]
+if 'YOLO' in args.model:
+    probabilities = output / np.sum(output, axis=1, keepdims=True)
+else:
+    probabilities = np.exp(output) / np.sum(np.exp(output), axis=1, keepdims=True)
 top5_prob = np.sort(probabilities, axis=1)[:, -5:][:, ::-1]
 top5_catid = np.argsort(probabilities, axis=1)[:, -5:][:, ::-1]
 
