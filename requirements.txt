@@ -1,0 +1,9 @@
+numpy==1.26.4
+onnx==1.14.1
+onnxoptimizer==0.3.13
+onnxruntime==1.18.0
+pandas==2.2.2
+Pillow==10.4.0
+torch==2.3.0
+torchvision==0.18.0
+ultralytics==8.1.3
