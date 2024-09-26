@@ -1,6 +1,6 @@
 # C-SFE
 The project is aimed at validating Cross-layer Sensitive Filter Exploration (C-SFE).
-
+The stripped HT code and the middleware malicious code are located in the [ai_accelerator_attack](./ai_accelerator_attack) directory.
 ## Table of Contents
 - [Installation](#installation)
 - [Quick Start](#quick-start)
